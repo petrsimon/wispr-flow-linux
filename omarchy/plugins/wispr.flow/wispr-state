@@ -39,6 +39,16 @@ LANGUAGES="${WISPR_LANGUAGES:-en}"
 # after a switch, the app's once it has flushed or the Hub has been used.
 LANG_STATE="${XDG_RUNTIME_DIR:-/tmp}/wispr-flow-language.$UID"
 
+# Start or stop dictation, whichever the current state calls for. Exposed here
+# as well as in the panel so a keybinding can reach it without the shell.
+toggle_dictation() {
+  command -v wispr-flow >/dev/null || { printf 'wispr-state: wispr-flow not on PATH\n' >&2; exit 2; }
+  case "$(state)" in
+    listening | initializing) exec wispr-flow "wispr-flow://stop-hands-free" ;;
+    *) exec wispr-flow "wispr-flow://start-hands-free" ;;
+  esac
+}
+
 set_language() {
   local codes="$1"
   [[ -n $codes ]] || { printf 'wispr-state: --set-language needs codes\n' >&2; exit 2; }
@@ -47,14 +57,6 @@ set_language() {
   exec wispr-flow "wispr-flow://set-language?lang=$codes"
 }
 
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --set-language) set_language "${2:-}" ;;
-    --languages)    LANGUAGES="${2:-$LANGUAGES}"; shift 2 ;;
-    -*)             printf 'wispr-state: unknown option %s\n' "$1" >&2; exit 2 ;;
-    *)              LANGUAGES="$1"; shift ;;
-  esac
-done
 
 running() {
   pgrep -x wispr-flow >/dev/null 2>&1
@@ -117,6 +119,20 @@ current_device_id() {
   [[ -r $CONFIG ]] || return 0
   jq -r '.prefs.user.overrideAudioDeviceId // empty' "$CONFIG" 2>/dev/null || true
 }
+
+# Parsed here rather than at the top of the file: the actions below call
+# functions defined above, and a definition only exists once execution has
+# reached it -- running the loop earlier left `state` unset, so --toggle read an
+# empty state and always started a dictation instead of ending one.
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --toggle)       toggle_dictation ;;
+    --set-language) set_language "${2:-}" ;;
+    --languages)    LANGUAGES="${2:-$LANGUAGES}"; shift 2 ;;
+    -*)             printf 'wispr-state: unknown option %s\n' "$1" >&2; exit 2 ;;
+    *)              LANGUAGES="$1"; shift ;;
+  esac
+done
 
 if ! running; then
   jq -n '{running: false, state: "", languages: [], auto: false,
