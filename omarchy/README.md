@@ -33,6 +33,14 @@ middle click raises the Hub. Inside the panel: dictation state, a start/stop
 button, the microphone list and the language list, each with the current
 choice checked. `j`/`k` walk the rows, Enter activates, Escape closes.
 
+Dictation is always driven with the panel shut: an open panel holds keyboard
+focus, and Wispr records the focused window at start and synthesizes the paste
+keystroke into it at stop, so a dictation started from an open panel would end
+with the transcript on the clipboard and nowhere else. Starting or stopping
+from inside the panel therefore closes it first and gives the compositor a
+moment to hand focus back. Right click is the shortest path: it toggles
+dictation without opening the panel at all.
+
 The panel drives the app entirely through its `wispr-flow:` deep links, so it
 needs no privileged access and no window of Wispr's own. Three of the patches
 in `scripts/patches/` have to be in the build for it to work:

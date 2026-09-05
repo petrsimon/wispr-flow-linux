@@ -86,8 +86,21 @@ Panel {
     settleTimer.restart()
   }
 
+  // Dictation has to be driven with the panel shut. The panel takes keyboard
+  // focus while it is open, so Wispr would record it as the active app at
+  // start and synthesize the paste keystroke into it at stop -- the transcript
+  // reaches the clipboard and nothing else. Closing first hands focus back to
+  // the window the text is meant for; the small delay lets the compositor
+  // finish that handover before Wispr looks.
   function toggleDictation() {
-    deeplink(dictating ? "stop-hands-free" : "start-hands-free")
+    var route = dictating ? "stop-hands-free" : "start-hands-free"
+    if (opened) {
+      close()
+      pendingRoute = route
+      focusHandoffTimer.restart()
+    } else {
+      deeplink(route)
+    }
   }
 
   function selectDevice(device) {
@@ -148,6 +161,19 @@ Panel {
     repeat: true
     triggeredOnStart: true
     onTriggered: root.refresh()
+  }
+
+  property string pendingRoute: ""
+
+  Timer {
+    id: focusHandoffTimer
+    interval: 150
+    repeat: false
+    onTriggered: {
+      if (root.pendingRoute === "") return
+      root.deeplink(root.pendingRoute)
+      root.pendingRoute = ""
+    }
   }
 
   Timer {
