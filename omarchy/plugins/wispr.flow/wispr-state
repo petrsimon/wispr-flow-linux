@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+#
+# One JSON snapshot of everything the Wispr Flow panel draws. Keeping the
+# gathering here rather than in QML means the log and config parsing is
+# testable from a shell and the panel stays presentation code.
+#
+#   { "running": true,
+#     "state": "idle",
+#     "devices":   [ { "id": "...", "name": "...", "selected": true } ],
+#     "languages": [ { "code": "cs", "name": "Czech", "selected": false } ],
+#     "auto": true }
+#
+# "auto" means Wispr is detecting across several languages rather than pinned
+# to one -- that is what a multi-entry selectedLanguages means to the app.
+
+set -euo pipefail
+
+LOG="${WISPR_LOG:-$HOME/.cache/wispr-flow/launcher.log}"
+CONFIG="${WISPR_CONFIG:-$HOME/.config/Wispr Flow/config.json}"
+# Languages the panel offers, as a comma-separated list of codes, given either
+# as the first argument or in the environment. Seeded at install time from the
+# app's own selection, because pinning one language rewrites that list and the
+# original set would otherwise be lost.
+LANGUAGES="${1:-${WISPR_LANGUAGES:-en}}"
+
+running() {
+  pgrep -x wispr-flow >/dev/null 2>&1
+}
+
+# The app logs a transition on every state change; the last one is current.
+# No match is the normal "nothing dictated this session" case.
+state() {
+  [[ -r $LOG ]] || return 0
+  { grep -oE 'updateDictationStatus: [a-z_]+' "$LOG" || true; } \
+    | tail -n 1 \
+    | cut -d' ' -f2
+}
+
+# The live device list, as the app sees it: a single-quoted JSON array logged
+# on every settings sync. Only these are switchable -- the ranked list in
+# config.json also remembers devices that are unplugged. The JSON carries no
+# single quotes of its own, so the delimiters are unambiguous.
+devices_json() {
+  local line
+  [[ -r $LOG ]] || { printf '[]'; return 0; }
+  line=$({ grep -a "audioDevices: '" "$LOG" || true; } | tail -n 1)
+  [[ -n $line ]] || { printf '[]'; return 0; }
+  sed -E "s/^[^']*'//; s/'[^']*\$//" <<<"$line"
+}
+
+selected_languages() {
+  [[ -r $CONFIG ]] || { printf '[]'; return 0; }
+  jq -c '.prefs.user.selectedLanguages // []' "$CONFIG" 2>/dev/null || printf '[]'
+}
+
+current_device_id() {
+  [[ -r $CONFIG ]] || return 0
+  jq -r '.prefs.user.overrideAudioDeviceId // empty' "$CONFIG" 2>/dev/null || true
+}
+
+if ! running; then
+  jq -n '{running: false, state: "", devices: [], languages: [], auto: false}'
+  exit 0
+fi
+
+jq -n \
+  --arg state "$(state)" \
+  --arg current "$(current_device_id)" \
+  --arg offered "$LANGUAGES" \
+  --argjson devices "$(devices_json)" \
+  --argjson selected "$(selected_languages)" \
+  '
+  # Endonyms where they differ usefully from the code; anything unlisted falls
+  # back to the bare code so an unknown language still renders.
+  {
+    ar: "Arabic",   cs: "Czech",     da: "Danish",   de: "German",
+    el: "Greek",    en: "English",   es: "Spanish",  fi: "Finnish",
+    fr: "French",   he: "Hebrew",    hi: "Hindi",    hu: "Hungarian",
+    id: "Indonesian", it: "Italian", ja: "Japanese", ko: "Korean",
+    nl: "Dutch",    no: "Norwegian", pl: "Polish",   pt: "Portuguese",
+    ro: "Romanian", ru: "Russian",   sk: "Slovak",   sv: "Swedish",
+    tr: "Turkish",  uk: "Ukrainian", vi: "Vietnamese", zh: "Chinese"
+  } as $names
+  | ($offered | split(",") | map(select(length > 0))) as $codes
+  | ($selected | length > 1) as $auto
+  | {
+      running: true,
+      state: $state,
+      auto: $auto,
+      devices: ($devices | map({
+        id: .deviceId,
+        name: .name,
+        selected: (.deviceId == $current)
+      })),
+      languages: ($codes | map({
+        code: .,
+        name: ($names[.] // .),
+        selected: ($auto | not) and ($selected | index(.) != null)
+      }))
+    }
+  '

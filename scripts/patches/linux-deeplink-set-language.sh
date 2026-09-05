@@ -34,6 +34,10 @@
 # immediately before the switch-mic branch it is modelled on:
 #
 #   else if(e.startsWith("wispr-flow://set-language")){ ...set the pref... }
+#
+# `lang` takes one code to pin a language, or a comma-separated list to hand
+# the choice back to Wispr's own detection across those languages -- which is
+# what a multi-entry selectedLanguages means to the request builders.
 #   else if(e.startsWith("wispr-flow://switch-mic"))$(e);
 #
 # ANCHORING
@@ -127,12 +131,13 @@ new_branch = (
     'else if(' + url + '.startsWith("wispr-flow://set-language")){'
     '/*' + marker + '*/'
     'try{'
-    'const l=new URL(' + url + ').searchParams.get("lang");'
-    'if(!l)' + log + '().warn("Set language deeplink received without lang parameter");'
+    'const l=(new URL(' + url + ').searchParams.get("lang")||"")'
+    '.split(",").map(s=>s.trim()).filter(s=>s.length>0);'
+    'if(!l.length)' + log + '().warn("Set language deeplink received without lang parameter");'
     'else if(!' + state + '.RA.prefs?.user)'
     + log + '().warn("Set language deeplink received before prefs were loaded");'
-    'else{' + state + '.RA.prefs.user.selectedLanguages=[l];'
-    + log + '().info(`Set language deeplink received: ${l}`)}'
+    'else{' + state + '.RA.prefs.user.selectedLanguages=l;'
+    + log + '().info(`Set language deeplink received: ${l.join(",")}`)}'
     '}catch(err){'
     + log + '().error("Error handling set language deeplink:",'
     '{customAttributes:{error:err}})}}'
@@ -173,4 +178,5 @@ fi
 
 echo "OK: set-language deep-link route added in $BUNDLE"
 echo
-echo "  wispr-flow://set-language?lang=cs   pins the next dictation to Czech"
+echo "  wispr-flow://set-language?lang=cs      pins the next dictation to Czech"
+echo "  wispr-flow://set-language?lang=en,cs   restores detection across both"
