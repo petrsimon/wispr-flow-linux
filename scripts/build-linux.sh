@@ -325,6 +325,11 @@ step3_patch_bundle() {
     auto "Running linux-deeplink-second-instance.sh on $target_bundle"
     bash "$SCRIPT_DIR/patches/linux-deeplink-second-instance.sh" "$target_bundle" \
       || die "Warm-start deep-link patch failed -- see output above."
+    # Add the deep-link route Wispr does not ship: the dictation language lives
+    # only in the Hub UI, and a bar widget needs to reach it.
+    auto "Running linux-deeplink-set-language.sh on $target_bundle"
+    bash "$SCRIPT_DIR/patches/linux-deeplink-set-language.sh" "$target_bundle" \
+      || die "Set-language patch failed -- see output above."
     # Take the Electron single-instance lock at the very top of the bundle,
     # before ANY init runs. The vendor only requests the lock at the end of
     # its ~8.3 MB bundle, so a second launch fully initializes (native .node
