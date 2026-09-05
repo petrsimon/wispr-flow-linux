@@ -48,7 +48,7 @@ MARKERS=(
   "window-frame: linux frameless window branch|F|WISPR_LINUX_FRAMELESS"
   "treat-as-windows: linux widens renderer isWindows bind|F|WISPR_LINUX_RENDERER_ISWIN"
   "deeplink: linux cold-start argv parse|F|WISPR_LINUX_DEEPLINK"
-  "deeplink: linux warm-start second-instance parse|F|WISPR_LINUX_DEEPLINK_WARM"
+  "deeplink: linux warm-start second-instance parse|F|WISPR_LINUX_WARM_DEEPLINK"
   "deeplink: set-language route|F|WISPR_LINUX_SET_LANGUAGE"
 )
 

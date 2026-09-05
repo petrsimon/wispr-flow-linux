@@ -37,7 +37,8 @@ declare -gA MARKER_SAMPLES=(
 	[windowframe]='"win32"===process.platform||"linux"===process.platform/*WISPR_LINUX_FRAMELESS*/&&Object.assign(t,{titleBarStyle:"hidden"});'
 	[treataswindows]='const x=((y?.platform?.isWindows??!1)||"linux"===y?.platform?.os)/*WISPR_LINUX_RENDERER_ISWIN*/;'
 	[deeplink]='if(f.H8||"linux"===process.platform){/*WISPR_LINUX_DEEPLINK*/const e=process.argv.find(x=>x.startsWith("wispr-flow:"));}'
-	[deeplinkwarm]='if(b.H8||"linux"===process.platform){/*WISPR_LINUX_DEEPLINK_WARM*/const e=P(r.find(x=>x.startsWith("wispr-flow:")));}'
+	[deeplinkwarm]='if(b.H8||"linux"===process.platform){/*WISPR_LINUX_WARM_DEEPLINK*/const e=P(r.find(x=>x.startsWith("wispr-flow:")));}'
+	[deeplinksetlang]='else if(e.startsWith("wispr-flow://set-language")){/*WISPR_LINUX_SET_LANGUAGE*/const l=[];}'
 )
 
 # Write a fixture app.asar-like file containing every marker, except the one

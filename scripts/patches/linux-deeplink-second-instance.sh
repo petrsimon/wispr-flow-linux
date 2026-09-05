@@ -84,7 +84,10 @@ if [[ ! -f "$BUNDLE" ]]; then
 fi
 
 # --- Idempotency guard --------------------------------------------------------
-LINUX_MARKER="WISPR_LINUX_DEEPLINK_WARM"
+# Deliberately not WISPR_LINUX_DEEPLINK_WARM: verify-patches.sh greps for
+# fixed strings, so a marker that has another marker as a prefix would keep
+# reporting that other one present after it had been lost.
+LINUX_MARKER="WISPR_LINUX_WARM_DEEPLINK"
 if grep -q "$LINUX_MARKER" "$BUNDLE"; then
 	echo "Already patched ($LINUX_MARKER present in $BUNDLE) - nothing to do."
 	exit 0
