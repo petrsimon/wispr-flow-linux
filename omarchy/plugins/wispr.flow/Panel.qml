@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import Quickshell
 import Quickshell.Io
+import Quickshell.Services.Pipewire
 import qs.Ui
 import qs.Commons
 
@@ -162,6 +163,88 @@ Panel {
     if (cursor >= rows.length) cursor = Math.max(0, rows.length - 1)
   }
 
+  // A real level meter rather than a canned animation: PwNodePeakMonitor reports
+  // the microphone's peak, and only while dictating -- monitoring a node has a
+  // cost, and an idle bar should not pay it.
+  // Five bars, not nine: the icon slot is about 22px across, and thinner bars
+  // than this read as a dotted line rather than a meter.
+  readonly property int meterBars: 5
+  property var levels: []
+
+  // The meter is relative, not absolute. Peak values sit wherever the card's
+  // gain puts them -- this machine idles around 0.7 -- so a fixed scale either
+  // pins every bar to the ceiling or flattens them all. Instead a floor and a
+  // ceiling track the recent range and the level is read against that: it
+  // shows the modulation of a voice, which is what the meter is for.
+  property real meterFloor: 1
+  property real meterCeiling: 0
+
+  function pushLevel(value) {
+    var peak = Math.max(0, value)
+    // The floor creeps up and the ceiling sinks, so a room that goes quiet or
+    // a voice that gets louder is followed within a second or two rather than
+    // leaving the scale stuck at the loudest thing ever heard.
+    meterFloor = Math.min(peak, meterFloor + 0.004)
+    meterCeiling = Math.max(peak, meterCeiling - 0.008)
+
+    var span = Math.max(0.02, meterCeiling - meterFloor)
+    var level = Math.max(0, Math.min(1, (peak - meterFloor) / span))
+
+    var next = levels.slice(-(meterBars - 1))
+    next.push(level)
+    while (next.length < meterBars) next.unshift(0)
+    levels = next
+  }
+
+  PwObjectTracker {
+    objects: Pipewire.defaultAudioSource ? [Pipewire.defaultAudioSource] : []
+  }
+
+  PwNodePeakMonitor {
+    id: peakMonitor
+    node: Pipewire.defaultAudioSource
+    enabled: root.dictating
+  }
+
+  Timer {
+    interval: 70
+    repeat: true
+    running: root.dictating
+    onTriggered: root.pushLevel(peakMonitor.peak)
+    onRunningChanged: if (!running) {
+      root.levels = []
+      root.meterFloor = 1
+      root.meterCeiling = 0
+    }
+  }
+
+  Component {
+    id: meterComponent
+
+    Row {
+      anchors.centerIn: parent
+      spacing: Math.max(1, Math.round(parent.width * 0.09))
+
+      Repeater {
+        model: root.levels.length
+
+        Rectangle {
+          required property int index
+          readonly property real level: root.levels[index]
+          width: Math.max(1, Math.round((parent.parent.width
+            - (root.meterBars - 1) * parent.spacing) / root.meterBars))
+          // A floor keeps the meter legible as a row of dots through a pause,
+          // instead of blinking out of existence between words.
+          height: Math.max(width, Math.round(parent.parent.height * level))
+          radius: width / 2
+          color: root.bar ? root.bar.urgent : Color.urgent
+          anchors.verticalCenter: parent.verticalCenter
+          Behavior on height { NumberAnimation { duration: 70 } }
+        }
+      }
+    }
+  }
+
   Process {
     id: stateProcess
     running: false
@@ -229,6 +312,9 @@ Panel {
     // like dictation wherever it surfaces. Absence is shown by dimming rather
     // than a mic-off glyph, which would read as "muted".
     text: root.busy && !root.dictating ? "󰔟" : "󰍬"
+    // While dictating the glyph gives way to the meter, so the bar shows that
+    // something is being heard rather than merely that recording is on.
+    iconComponent: root.dictating ? meterComponent : null
     active: root.dictating
     dimmed: !root.appRunning
     tooltipText: {

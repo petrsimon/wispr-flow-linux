@@ -66,6 +66,18 @@ Sitting where the Dictation indicator was, this widget is the richer form of
 the same thing: the mic still goes active while recording, but it is clickable
 and carries the language and the Hub behind it.
 
+While dictation is running the microphone glyph gives way to a five-bar level
+meter fed by `PwNodePeakMonitor` on the default audio source, so the bar shows
+that something is actually being *heard* rather than only that recording is on.
+The monitor is enabled only while dictating, since watching a node is not free.
+
+The meter is deliberately relative rather than absolute. Peak values land
+wherever the sound card's gain puts them — one machine here idles around 0.7 —
+so a fixed scale either pins every bar to the ceiling or flattens them all
+flat. A floor and a ceiling follow the recent range instead and the level is
+read against those, which shows the modulation of a voice. At rest it settles
+into a row of dots rather than vanishing.
+
 `showIcon: false` is for the other arrangement — keeping voxtype's indicator,
 or wanting no permanent icon at all. With it off the widget keeps a zero-width
 slot and only the `SUPER+CTRL+M` binding opens the panel.
