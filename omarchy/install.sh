@@ -8,7 +8,7 @@
 #
 # Usage:
 #   omarchy/install.sh [--appimage <path>] [--section left|center|right]
-#                      [--languages en,cs] [--no-restart]
+#                      [--languages en,cs] [--no-icon] [--no-restart]
 #===============================================================================
 set -euo pipefail
 
@@ -24,6 +24,7 @@ appimage=''
 section='right'
 languages=''
 restart='yes'
+show_icon='true'
 
 die() { printf 'install: %s\n' "$*" >&2; exit 1; }
 say() { printf '\n== %s\n' "$*"; }
@@ -34,6 +35,7 @@ while [[ $# -gt 0 ]]; do
 		--appimage)  [[ -n ${2:-} ]] || die '--appimage needs a path'; appimage="$2"; shift 2 ;;
 		--section)   [[ -n ${2:-} ]] || die '--section needs a value'; section="$2"; shift 2 ;;
 		--languages) [[ -n ${2:-} ]] || die '--languages needs a value'; languages="$2"; shift 2 ;;
+		--no-icon)   show_icon='false'; shift ;;
 		--no-restart) restart='no'; shift ;;
 		-h|--help)   grep '^#' "$0" | sed 's/^# \?//'; exit 0 ;;
 		*)           die "unknown argument: $1" ;;
@@ -122,12 +124,15 @@ updated=$(jq \
 	--arg id "$PLUGIN_ID" \
 	--arg section "$section" \
 	--arg languages "$languages" \
+	--argjson showIcon "$show_icon" \
 	'
-	def entry: {id: $id, languages: $languages};
+	def entry: {id: $id, languages: $languages, showIcon: $showIcon};
 	.bar.layout[$section] = (
 		(.bar.layout[$section] // []) as $list
 		| if ($list | map(.id == $id) | any)
-			then ($list | map(if .id == $id then . + {languages: $languages} else . end))
+			then ($list | map(if .id == $id
+				then . + {languages: $languages, showIcon: $showIcon}
+				else . end))
 			else ($list + [entry])
 		  end
 	)
