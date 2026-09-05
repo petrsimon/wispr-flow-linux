@@ -151,7 +151,7 @@ if [[ $restart == 'yes' ]]; then
 	info 'done'
 else
 	say 'Skipped the shell restart'
-	info 'run `omarchy restart shell` before the widget appears'
+	info "run 'omarchy restart shell' before the widget appears"
 fi
 
 cat <<'NEXT'

@@ -1423,7 +1423,7 @@ app.on("second-instance",(t,r)=>{if(r.includes("--quit-app"))return;const i=r.fi
 JS
 	run bash "$PATCH_DIR/linux-deeplink-second-instance.sh" "$FIX"
 	[[ "$status" -eq 0 ]]
-	grep -q 'WISPR_LINUX_DEEPLINK_WARM' "$FIX"
+	grep -q 'WISPR_LINUX_WARM_DEEPLINK' "$FIX"
 	grep -qF 'if(b.H8||"linux"===process.platform){' "$FIX"
 	node_check "$FIX"
 }
@@ -1447,7 +1447,7 @@ if(b.H8){const e=P(process.argv.find(e=>e.startsWith("wispr-flow:")||e.startsWit
 JS
 	run bash "$PATCH_DIR/linux-deeplink-second-instance.sh" "$FIX"
 	[[ "$status" -ne 0 ]]
-	! grep -q 'WISPR_LINUX_DEEPLINK_WARM' "$FIX"
+	! grep -q 'WISPR_LINUX_WARM_DEEPLINK' "$FIX"
 }
 
 @test "deeplink-warm: bails when the anchor is absent" {
@@ -1456,5 +1456,5 @@ app.on("second-instance",(t,r)=>{focusHub()});
 JS
 	run bash "$PATCH_DIR/linux-deeplink-second-instance.sh" "$FIX"
 	[[ "$status" -ne 0 ]]
-	! grep -q 'WISPR_LINUX_DEEPLINK_WARM' "$FIX"
+	! grep -q 'WISPR_LINUX_WARM_DEEPLINK' "$FIX"
 }
