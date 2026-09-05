@@ -26,9 +26,11 @@ Panel {
 
   property bool appRunning: false
   property string dictation: ""
-  property var devices: []
   property var langs: []
   property bool autoLanguage: false
+  property string device: ""
+  property string systemDevice: ""
+  property bool overridden: false
 
   readonly property bool busy: dictation === "listening" || dictation === "initializing"
       || dictation === "stopping" || dictation === "processing"
@@ -41,6 +43,13 @@ Panel {
     return "Idle"
   }
 
+  readonly property string languageLabel: {
+    if (autoLanguage) return "Auto"
+    for (var i = 0; i < langs.length; i++)
+      if (langs[i].selected) return langs[i].name
+    return ""
+  }
+
   readonly property color foreground: bar ? bar.foreground : Color.foreground
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
   readonly property color dim: Qt.darker(foreground, 1.55)
@@ -50,10 +59,10 @@ Panel {
   property int cursor: 0
   property bool cursorActive: false
   readonly property var rows: {
-    var list = [{ kind: "dictation" }]
-    for (var d = 0; d < devices.length; d++) list.push({ kind: "device", index: d })
-    list.push({ kind: "auto" })
+    var list = [{ kind: "auto" }]
     for (var l = 0; l < langs.length; l++) list.push({ kind: "language", index: l })
+    list.push({ kind: "dictation" })
+    if (overridden) list.push({ kind: "release" })
     return list
   }
 
@@ -72,9 +81,9 @@ Panel {
     if (cursor < 0 || cursor >= rows.length) return
     var row = rows[cursor]
     if (row.kind === "dictation") toggleDictation()
-    else if (row.kind === "device") selectDevice(devices[row.index])
     else if (row.kind === "auto") setLanguage(languages)
     else if (row.kind === "language") setLanguage(langs[row.index].code)
+    else if (row.kind === "release") releaseDevice()
   }
 
   // ---------------------------------------------------------------- actions
@@ -103,13 +112,22 @@ Panel {
     }
   }
 
-  function selectDevice(device) {
-    if (!device || device.selected) return
-    deeplink("switch-mic?mic_name=" + encodeURIComponent(device.name))
+  // Hand the microphone back to the system. Wispr's device setting is an
+  // override; on its "default" entry the app follows whatever PipeWire is
+  // capturing from, which the Omarchy audio panel owns along with input volume
+  // and mute. This panel offers no picker of its own -- only the way out.
+  function releaseDevice() {
+    if (!overridden || systemDevice === "") return
+    deeplink("switch-mic?mic_name=" + encodeURIComponent(systemDevice))
   }
 
+  // Through the helper rather than straight to the deep link: it records the
+  // choice next to the app's config, which Wispr only flushes later, so the
+  // panel reflects a switch immediately instead of minutes afterwards.
   function setLanguage(codes) {
-    deeplink("set-language?lang=" + encodeURIComponent(codes))
+    actionProcess.command = [root.helper, "--set-language", codes]
+    actionProcess.running = true
+    settleTimer.restart()
   }
 
   // ---------------------------------------------------------------- polling
@@ -129,9 +147,11 @@ Panel {
     }
     appRunning = parsed.running === true
     dictation = String(parsed.state || "")
-    devices = parsed.devices instanceof Array ? parsed.devices : []
     langs = parsed.languages instanceof Array ? parsed.languages : []
     autoLanguage = parsed.auto === true
+    device = String(parsed.device || "")
+    systemDevice = String(parsed.systemDevice || "")
+    overridden = parsed.overridden === true
     if (cursor >= rows.length) cursor = Math.max(0, rows.length - 1)
   }
 
@@ -197,9 +217,18 @@ Panel {
     id: button
     anchors.fill: parent
     bar: root.bar
-    text: root.appRunning ? (root.busy ? "󰔟" : "󰍬") : "󰍭"
+    // A plain microphone reads as the system mic widget next door; the
+    // speech-bubble variant says dictation. Absence is shown by dimming rather
+    // than a mic-off glyph, which would read as "muted".
+    text: root.busy && !root.dictating ? "󰔟" : "󰮤"
     active: root.dictating
-    tooltipText: root.appRunning ? "Wispr Flow · " + root.stateLabel : "Wispr Flow not running"
+    dimmed: !root.appRunning
+    tooltipText: {
+      if (!root.appRunning) return "Wispr Flow not running"
+      var tip = "Wispr Flow · " + root.stateLabel
+      if (root.languageLabel !== "") tip += " · " + root.languageLabel
+      return tip
+    }
     onPressed: function(mouseButton) {
       if (mouseButton === Qt.RightButton) root.toggleDictation()
       else if (mouseButton === Qt.MiddleButton) root.deeplink("open")
@@ -242,53 +271,77 @@ Panel {
           width: scrollArea.availableWidth
           spacing: Style.space(12)
 
-          // ---------- Hero ----------
+          // ---------- Header: one line, since the bar icon already carries
+          // the state and repeating it here just spends the top third ----------
           Item {
             width: parent.width
-            implicitHeight: Math.max(heroIcon.implicitHeight, heroText.implicitHeight)
+            implicitHeight: Math.max(heroIcon.implicitHeight, heroLabel.implicitHeight)
 
             Text {
               id: heroIcon
               textFormat: Text.PlainText
-              text: root.appRunning ? "󰍬" : "󰍭"
+              text: "󰮤"
               color: root.dictating ? Color.accent : root.foreground
               font.family: root.fontFamily
-              font.pixelSize: Style.font.display
+              font.pixelSize: Style.font.title
               anchors.left: parent.left
               anchors.verticalCenter: parent.verticalCenter
             }
 
-            Column {
-              id: heroText
+            Text {
+              id: heroLabel
+              textFormat: Text.PlainText
+              text: "Wispr Flow · " + root.stateLabel
+              color: root.foreground
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.title
+              font.bold: true
+              elide: Text.ElideRight
               anchors.left: heroIcon.right
-              anchors.leftMargin: Style.space(14)
+              anchors.leftMargin: Style.space(10)
               anchors.right: parent.right
               anchors.verticalCenter: parent.verticalCenter
-              spacing: Style.space(2)
-
-              Text {
-                text: "Wispr Flow"
-                color: root.foreground
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.title
-                font.bold: true
-                elide: Text.ElideRight
-                width: parent.width
-              }
-
-              Text {
-                textFormat: Text.PlainText
-                text: root.stateLabel
-                color: root.dim
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.body
-                elide: Text.ElideRight
-                width: parent.width
-              }
             }
           }
 
-          // ---------- Dictation ----------
+          // ---------- Language: the one setting that lives nowhere else ------
+          PanelSeparator { width: parent.width }
+
+          PanelSectionHeader {
+            text: "Language"
+            foreground: root.foreground
+            fontFamily: root.fontFamily
+          }
+
+          ChoiceRow {
+            width: panelColumn.width
+            label: "Detect automatically"
+            glyph: "󰗋"
+            chosen: root.autoLanguage
+            rowKind: "auto"
+            rowIndex: -1
+            onActivated: root.setLanguage(root.languages)
+          }
+
+          Repeater {
+            model: root.langs
+            delegate: ChoiceRow {
+              required property var modelData
+              required property int index
+              width: panelColumn.width
+              label: modelData.name
+              glyph: "󰗋"
+              chosen: modelData.selected
+              rowKind: "language"
+              rowIndex: index
+              onActivated: root.setLanguage(modelData.code)
+            }
+          }
+
+          // ---------- Dictation: a convenience; right-clicking the bar icon
+          // does the same thing without opening anything ----------
+          PanelSeparator { width: parent.width }
+
           Button {
             width: parent.width
             text: root.dictating ? "Stop dictation" : "Start dictation"
@@ -303,76 +356,24 @@ Panel {
             onHovered: function(isHovered) {
               if (!isHovered) return
               root.cursorActive = true
-              root.cursor = 0
+              for (var i = 0; i < root.rows.length; i++) {
+                if (root.rows[i].kind === "dictation") { root.cursor = i; break }
+              }
             }
           }
 
-          // ---------- Microphone ----------
-          PanelSeparator { width: parent.width }
-
-          PanelSectionHeader {
-            text: "Microphone"
-            foreground: root.foreground
-            fontFamily: root.fontFamily
-          }
-
-          Repeater {
-            model: root.devices
-            delegate: ChoiceRow {
-              required property var modelData
-              required property int index
-              width: panelColumn.width
-              label: modelData.name
-              glyph: "󰍬"
-              chosen: modelData.selected
-              rowKind: "device"
-              rowIndex: index
-              onActivated: root.selectDevice(modelData)
-            }
-          }
-
-          Text {
-            visible: root.devices.length === 0
-            text: root.appRunning ? "No devices reported yet" : "Start Wispr Flow to list devices"
-            color: root.dim
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.body
-            width: parent.width
-            elide: Text.ElideRight
-          }
-
-          // ---------- Language ----------
-          PanelSeparator { width: parent.width }
-
-          PanelSectionHeader {
-            text: "Language"
-            foreground: root.foreground
-            fontFamily: root.fontFamily
-          }
-
+          // ---------- Microphone: only when Wispr is overriding the system ---
+          // Choosing the input device is the audio panel's job. All this shows
+          // is when Wispr has been pinned to something else, and how to undo it.
           ChoiceRow {
+            visible: root.overridden
             width: panelColumn.width
-            label: "Detect automatically"
-            glyph: "󰗊"
-            chosen: root.autoLanguage
-            rowKind: "auto"
+            label: "Release " + root.device
+            glyph: "󰍬"
+            chosen: false
+            rowKind: "release"
             rowIndex: -1
-            onActivated: root.setLanguage(root.languages)
-          }
-
-          Repeater {
-            model: root.langs
-            delegate: ChoiceRow {
-              required property var modelData
-              required property int index
-              width: panelColumn.width
-              label: modelData.name
-              glyph: "󰗊"
-              chosen: modelData.selected
-              rowKind: "language"
-              rowIndex: index
-              onActivated: root.setLanguage(modelData.code)
-            }
+            onActivated: root.releaseDevice()
           }
 
           // ---------- Hub ----------
