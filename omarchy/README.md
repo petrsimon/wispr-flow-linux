@@ -40,21 +40,35 @@ front-ends competing for the same microphone and the same paste target.
 To use Wispr instead:
 
 ```bash
-systemctl --user stop voxtype 2>/dev/null || pkill -x voxtype
-omarchy plugin disable omarchy.indicators   # or drop "Dictation" from its items
+# 1. Stop the daemon and keep it stopped.
+systemctl --user disable --now voxtype.service
+
+# 2. Drop voxtype's Dictation entry from the indicators widget, in shell.json,
+#    and put this widget in its place:
+#      { "id": "omarchy.indicators",
+#        "items": ["ScreenRecording", "Reminder", "NightLight", "Dnd", "StayAwake"] },
+#      { "id": "wispr.flow", "languages": "en,cs" }
+
+# 3. Take over voxtype's bindings, in ~/.config/hypr/bindings.lua. Omarchy only
+#    defines them while the voxtype binary is present, which it still is after
+#    the daemon stops, so they have to be unbound first.
+#      hl.unbind("SUPER + CTRL + X")
+#      hl.unbind("F9")
+#      o.bind("SUPER + CTRL + X", "Toggle dictation",
+#        "~/.config/omarchy/plugins/wispr.flow/wispr-state --toggle")
+#      o.bind("SUPER + CTRL + M", "Wispr Flow", "omarchy-shell wispr.flow toggle")
 ```
 
-Leave voxtype's keybindings alone or unbind them in `~/.config/hypr/bindings.lua`;
-Wispr reads its own push-to-talk key at the evdev level and does not need one.
+F9 push-to-talk has no replacement here and does not need one: Wispr reads its
+own push-to-talk key at the evdev level, whatever the compositor is doing.
 
-Because Omarchy shows dictation as an *indicator* rather than a permanent
-icon, a second microphone in the bar reads as a duplicate. Hence `showIcon`:
-with it off the widget keeps a zero-width slot and the panel is opened by a
-binding instead, in the style of the other bar panels:
+Sitting where the Dictation indicator was, this widget is the richer form of
+the same thing: the mic still goes active while recording, but it is clickable
+and carries the language and the Hub behind it.
 
-```lua
-o.bind("SUPER + CTRL + M", "Wispr Flow", "omarchy-shell wispr.flow toggle")
-```
+`showIcon: false` is for the other arrangement — keeping voxtype's indicator,
+or wanting no permanent icon at all. With it off the widget keeps a zero-width
+slot and only the `SUPER+CTRL+M` binding opens the panel.
 
 ## The widget
 
