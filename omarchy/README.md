@@ -18,13 +18,43 @@ Everything it installs lives under `$HOME`; nothing needs root.
 |---|---|
 | `~/.config/omarchy/plugins/wispr.flow/` | the bar plugin (`Panel.qml`, `wispr-state`, `manifest.json`) |
 | `~/.config/omarchy/shell.json` | a `wispr.flow` entry in the bar layout (backed up first) |
+| — | nothing else; the keybinding and the Hyprland rules are printed, not applied |
 | `~/.local/opt/wispr-flow/wispr-flow.AppImage` | the app, with `--appimage` |
 | `~/.local/bin/wispr-flow` | wrapper, with `--appimage` |
 | `~/.local/share/applications/wispr-flow.desktop` | desktop entry claiming the `wispr-flow:` URL scheme, with `--appimage` |
 
 Pass `--section left\|center\|right` to place the widget, `--languages en,cs`
-to override the offered languages, and `--no-restart` to skip the shell
-restart. Re-running is safe: an existing bar entry is updated in place.
+to override the offered languages, `--no-icon` to leave the bar icon out, and
+`--no-restart` to skip the shell restart. Re-running is safe: an existing bar
+entry is updated in place.
+
+## Relationship to voxtype
+
+Omarchy's own dictation is [voxtype](https://github.com/voxtype/voxtype): a
+binary, a `Dictation` entry in the `omarchy.indicators` widget, and the
+`SUPER+CTRL+X` / `F9` bindings in
+`$OMARCHY_PATH/default/hypr/bindings/voxtype.lua`. This plugin is an
+alternative to that, not a companion — running both means two dictation
+front-ends competing for the same microphone and the same paste target.
+
+To use Wispr instead:
+
+```bash
+systemctl --user stop voxtype 2>/dev/null || pkill -x voxtype
+omarchy plugin disable omarchy.indicators   # or drop "Dictation" from its items
+```
+
+Leave voxtype's keybindings alone or unbind them in `~/.config/hypr/bindings.lua`;
+Wispr reads its own push-to-talk key at the evdev level and does not need one.
+
+Because Omarchy shows dictation as an *indicator* rather than a permanent
+icon, a second microphone in the bar reads as a duplicate. Hence `showIcon`:
+with it off the widget keeps a zero-width slot and the panel is opened by a
+binding instead, in the style of the other bar panels:
+
+```lua
+o.bind("SUPER + CTRL + M", "Wispr Flow", "omarchy-shell wispr.flow toggle")
+```
 
 ## The widget
 

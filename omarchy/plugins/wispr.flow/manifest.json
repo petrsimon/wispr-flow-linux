@@ -19,9 +19,16 @@
     "allowMultiple": false,
     "defaultSection": "right",
     "defaults": {
-      "languages": "en"
+      "languages": "en",
+      "showIcon": true
     },
     "schema": [
+      {
+        "key": "showIcon",
+        "type": "boolean",
+        "label": "Show the icon in the bar",
+        "defaultValue": true
+      },
       {
         "key": "languages",
         "type": "string",

@@ -13,10 +13,17 @@ Panel {
   moduleName: "wispr.flow"
   ipcTarget: "wispr.flow"
 
+  // Omarchy's own dictation UI (voxtype) surfaces as an indicator rather than a
+  // permanent icon, and a second microphone in the bar reads as a duplicate. So
+  // the icon is optional: hidden, the widget keeps a zero-width slot and the
+  // panel stays reachable over IPC (`omarchy-shell wispr.flow toggle`), which
+  // is what a keybinding calls.
+  readonly property bool showIcon: root.setting("showIcon", true) === true
+
   // The bar sizes each widget slot from the plugin root's implicit size, so
   // the root has to carry the button's -- an Item with anchored children has
   // none of its own and the slot collapses to nothing.
-  implicitWidth: button.implicitWidth
+  implicitWidth: showIcon ? button.implicitWidth : 0
   implicitHeight: button.implicitHeight
 
   // The helper lives beside this file, so the plugin works from wherever it
@@ -217,10 +224,11 @@ Panel {
     id: button
     anchors.fill: parent
     bar: root.bar
-    // A plain microphone reads as the system mic widget next door; the
-    // speech-bubble variant says dictation. Absence is shown by dimming rather
+    visible: root.showIcon
+    // The same glyphs Omarchy's own Dictation indicator uses, so dictation looks
+    // like dictation wherever it surfaces. Absence is shown by dimming rather
     // than a mic-off glyph, which would read as "muted".
-    text: root.busy && !root.dictating ? "󰔟" : "󰮤"
+    text: root.busy && !root.dictating ? "󰔟" : "󰍬"
     active: root.dictating
     dimmed: !root.appRunning
     tooltipText: {
@@ -280,7 +288,7 @@ Panel {
             Text {
               id: heroIcon
               textFormat: Text.PlainText
-              text: "󰮤"
+              text: "󰍬"
               color: root.dictating ? Color.accent : root.foreground
               font.family: root.fontFamily
               font.pixelSize: Style.font.title
