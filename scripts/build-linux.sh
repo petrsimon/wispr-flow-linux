@@ -273,10 +273,16 @@ step3_patch_bundle() {
     bash "$SCRIPT_DIR/patches/linux-window-frame.sh" "$target_bundle" \
       || warn "Window-frame patch failed -- see linux-window-frame.sh output above."
     # Parse the wispr-flow: deep-link URL out of argv at cold start on Linux too
-    # (the parse was win32-only; the warm-start second-instance path already works).
+    # (the parse was win32-only).
     auto "Running linux-deeplink.sh on $target_bundle"
     bash "$SCRIPT_DIR/patches/linux-deeplink.sh" "$target_bundle" \
       || warn "Deep-link patch failed -- see linux-deeplink.sh output above."
+    # Same for the warm-start path: the second-instance handler's argv scan was
+    # win32-only too, so a deep link aimed at an already-running app lost its
+    # payload on Linux and only focused the window.
+    auto "Running linux-deeplink-second-instance.sh on $target_bundle"
+    bash "$SCRIPT_DIR/patches/linux-deeplink-second-instance.sh" "$target_bundle" \
+      || warn "Warm-start deep-link patch failed -- see output above."
 
     # Renderer + preload patches live alongside the main bundle under .webpack/.
     local webpack_root="${target_bundle%/main/index.js}"

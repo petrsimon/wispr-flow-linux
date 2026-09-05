@@ -1,12 +1,13 @@
 #!/usr/bin/env bats
 #
 # linux-patches.bats
-# Unit tests for the four renderer/main bundle patches added for the Linux port:
+# Unit tests for the five renderer/main bundle patches added for the Linux port:
 #   * linux-renderer-chrome.sh           -> remaps the <html> platform class linux->win32
 #   * linux-window-frame.sh              -> frameless hub/settings window on Linux
 #   * linux-renderer-treat-as-windows.sh -> widens each renderer's isWindows bind
 #                                           (bridge stays honest; no preload touched)
 #   * linux-deeplink.sh                  -> cold-start wispr-flow: argv parse on Linux
+#   * linux-deeplink-second-instance.sh  -> warm-start wispr-flow: argv parse on Linux
 #
 # The real bundle is the proprietary, gitignored app -- not available in CI -- so
 # each test drives a hermetic minified-JS FIXTURE carrying the exact anchor the
@@ -201,4 +202,51 @@ JS
 	run bash "$PATCH_DIR/linux-deeplink.sh" "$FIX"
 	[[ "$status" -ne 0 ]]
 	! grep -q 'WISPR_LINUX_DEEPLINK' "$FIX"
+}
+
+# =============================================================================
+# linux-deeplink-second-instance.sh
+# =============================================================================
+
+@test "deeplink-warm: widens the second-instance win32 argv guard to include linux" {
+	cat > "$FIX" <<'JS'
+function U(x){}function P(x){return x}
+app.on("second-instance",(t,r)=>{if(r.includes("--quit-app"))return;const i=r.find(e=>e.startsWith("--squirrel-"));if(i){}else{if(b.H8){const e=P(r.find(e=>e.startsWith("wispr-flow:")||e.startsWith("wispr-flow/")));if(e)return void U(e)}}});
+JS
+	run bash "$PATCH_DIR/linux-deeplink-second-instance.sh" "$FIX"
+	[[ "$status" -eq 0 ]]
+	grep -q 'WISPR_LINUX_DEEPLINK_WARM' "$FIX"
+	grep -qF 'if(b.H8||"linux"===process.platform){' "$FIX"
+	node_check "$FIX"
+}
+
+@test "deeplink-warm: idempotent on second run" {
+	cat > "$FIX" <<'JS'
+function U(x){}function P(x){return x}
+app.on("second-instance",(t,r)=>{if(b.H8){const e=P(r.find(e=>e.startsWith("wispr-flow:")));if(e)return void U(e)}});
+JS
+	bash "$PATCH_DIR/linux-deeplink-second-instance.sh" "$FIX"
+	assert_idempotent "$PATCH_DIR/linux-deeplink-second-instance.sh" "$FIX"
+}
+
+@test "deeplink-warm: leaves the cold-start argv guard untouched" {
+	# The cold-start site scans process.argv.find(...) -- a dotted receiver the
+	# anchor excludes -- and sits before any "second-instance" literal, so the
+	# patch must bail rather than widen it a second time.
+	cat > "$FIX" <<'JS'
+function U(x){}function P(x){return x}
+if(b.H8){const e=P(process.argv.find(e=>e.startsWith("wispr-flow:")||e.startsWith("wispr-flow/")));e&&U(e)}
+JS
+	run bash "$PATCH_DIR/linux-deeplink-second-instance.sh" "$FIX"
+	[[ "$status" -ne 0 ]]
+	! grep -q 'WISPR_LINUX_DEEPLINK_WARM' "$FIX"
+}
+
+@test "deeplink-warm: bails when the anchor is absent" {
+	cat > "$FIX" <<'JS'
+app.on("second-instance",(t,r)=>{focusHub()});
+JS
+	run bash "$PATCH_DIR/linux-deeplink-second-instance.sh" "$FIX"
+	[[ "$status" -ne 0 ]]
+	! grep -q 'WISPR_LINUX_DEEPLINK_WARM' "$FIX"
 }
