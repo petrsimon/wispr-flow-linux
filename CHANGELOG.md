@@ -20,6 +20,17 @@ Flow app version is tracked separately by the `+wispr{X.Y.Z}` suffix.
   upgrading so GNOME Shell loads the updated extension. Thanks to
   @crafteraadarsh (helper #16 to #19, #34).
 
+### Fixed
+
+- A `wispr-flow:` deep link aimed at an already-running app was dropped on
+  Linux. The `second-instance` handler scans the new instance's argv for the
+  URL, but that scan was gated to win32, so the link fell through to the
+  "focus the window" branch and the payload was lost. The guard now includes
+  Linux, matching the cold-start fix. This makes the app's existing
+  `start-hands-free` / `stop-hands-free` / `switch-mic` / `open` routes
+  reachable in practice, so a panel button or keybinding can drive dictation
+  with a URL instead of a synthesized global shortcut.
+
 ## [v1.0.5] - 2026-10-28
 
 ### Added

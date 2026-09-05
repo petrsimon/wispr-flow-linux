@@ -38,6 +38,7 @@ declare -gA MARKER_SAMPLES=(
 	[hubfocusable]='webPreferences:{preload:p("../renderer","hub","preload.js"),devTools:d},focusable:/*WISPR_LINUX_HUB_FOCUSABLE*/"linux"===process.platform};'
 	[treataswindows]='const x=((y?.platform?.isWindows??!1)||"linux"===y?.platform?.os)/*WISPR_LINUX_RENDERER_ISWIN*/;'
 	[deeplink]='if(f.H8||"linux"===process.platform){/*WISPR_LINUX_DEEPLINK*/const e=process.argv.find(x=>x.startsWith("wispr-flow:"));}'
+	[deeplinkwarm]='if(b.H8||"linux"===process.platform){/*WISPR_LINUX_DEEPLINK_WARM*/const e=P(r.find(x=>x.startsWith("wispr-flow:")));}'
 	[earlysingleton]='/*WISPR_LINUX_EARLY_SINGLETON_V1*/try{var __wisprApp=require("electron").app;if(__wisprApp&&!__wisprApp.requestSingleInstanceLock()){__wisprApp.quit(),process.exit(0)}}catch(__wisprErr){}'
 	[pilldrag]='re=e=>{e=(/*WISPR_LINUX_DISABLE_PILL_DRAG*/"linux"===process.platform)?!1:e}'
 	[shortcutdefaults]='(r.H8||"linux"===process.platform)/*WISPR_LINUX_MAIN_SHORTCUT_DEFAULTS*/?pe:ce'
