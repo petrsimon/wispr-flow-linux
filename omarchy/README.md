@@ -29,9 +29,23 @@ restart. Re-running is safe: an existing bar entry is updated in place.
 ## The widget
 
 Left click opens the panel; right click toggles dictation without opening it;
-middle click raises the Hub. Inside the panel: dictation state, a start/stop
-button, the microphone list and the language list, each with the current
-choice checked. `j`/`k` walk the rows, Enter activates, Escape closes.
+middle click raises the Hub. `j`/`k` walk the rows, Enter activates, Escape
+closes.
+
+The panel leads with the language list, because that is the one setting that
+exists nowhere else on the desktop. Start/stop sits below it as a convenience —
+right-clicking the icon is quicker and does not have to open anything. State
+lives in the bar icon and its tooltip (`Wispr Flow · Idle · Czech`) rather than
+in a banner repeating it.
+
+**Choosing a microphone is not this panel's job.** Wispr's device setting is an
+override; while it sits on the app's `Auto-detect (Default)` entry Wispr simply
+records from whatever PipeWire is capturing, which `omarchy.audio` already
+controls alongside input volume and mute. Offering a second picker here would
+duplicate a working control and invite the two to disagree. The panel shows a
+`Release <device>` row only when the override is actually in force, so the way
+back to the system default is one click and the section is invisible the rest
+of the time.
 
 Dictation is always driven with the panel shut: an open panel holds keyboard
 focus, and Wispr records the focused window at start and synthesizes the paste
@@ -64,17 +78,23 @@ and config parsing can be checked from a shell:
   `selectedLanguages`. Pinning one language rewrites that list, so the original
   set has to be recorded first or it is lost. Change it later with
   `--languages`, or by editing the widget's entry in `shell.json`.
-- **The device list comes from the log, not from `config.json`.** The ranked
+- **The device names come from the log, not from `config.json`.** The ranked
   list in the config remembers microphones that are unplugged, and the app
   refuses to switch to those; the `audioDevices` array it logs on every
   settings sync holds only what is actually connected.
 - **A new bar widget needs a full shell restart.** `omarchy-shell shell
   rescanPlugins` reloads code for plugins already in the registry; a widget the
   shell has never seen leaves its slot empty until `omarchy restart shell`.
-- **A language switch is not persisted** and the Hub's own picker will not
-  reflect it: the route sets the in-memory pref that the transcription request
-  builders read, and the renderer's store is not notified. It survives until
-  the app restarts.
+- **A language switch lives in the app's memory, not in `config.json`.** The
+  route sets the pref the transcription request builders read; Wispr flushes
+  that file on its own schedule and often serializes a snapshot taken before
+  the change, so reading the language back from disk gives a stale answer —
+  sometimes for minutes. `wispr-state --set-language` therefore records the
+  choice in `$XDG_RUNTIME_DIR` and prefers its own record over the config file
+  for as long as the app has been running since it was written. A restart makes
+  the config authoritative again, and the switch is lost with it.
+- **The Hub's own language picker will not reflect a switch made here**, since
+  the renderer's store is not notified.
 
 ## Hyprland
 
