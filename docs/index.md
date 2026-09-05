@@ -27,6 +27,8 @@ protocol — the contract everything else hangs off — is in
   uinput udev rule, clipboard deps, the GNOME Shell extension, AT-SPI
 - [**Troubleshooting**](troubleshooting.md) — symptom-keyed fixes, reading
   `--doctor` output
+- [**Omarchy integration**](../omarchy/README.md) — the bar plugin, the deep-link
+  patches it depends on, the voxtype switch-over, and the Hyprland rules
 - [**Compatibility**](compatibility.md) — validated compositors / display
   servers and the access requirements per backend
 

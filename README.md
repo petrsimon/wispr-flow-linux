@@ -13,6 +13,12 @@ Linux and a Nix flake. The helper reimplements the one native capability Wispr
 Flow ships only for macOS and Windows: injecting transcribed text into your
 focused application.
 
+**This is a fork.** It tracks
+[wispr-flow-linux/wispr-flow-linux](https://github.com/wispr-flow-linux/wispr-flow-linux)
+and adds two Linux deep-link patches plus an [Omarchy](https://omarchy.org/) bar
+integration on top of it — see [Omarchy](#omarchy) below. Everything else here
+is upstream's work.
+
 **This is an unofficial port.** I'm not affiliated with Wispr. For the official
 app and support, see [wisprflow.ai](https://wisprflow.ai). If you hit a
 build-script or Linux issue,
@@ -61,6 +67,71 @@ Grab a `.deb`, `.rpm`, or `.AppImage` from the
 > Wispr's official endpoint at build time. Wispr Flow is a trademark of its
 > owners; this is an unofficial community port. Prefer to supply the installer
 > yourself? [Build from source](#building) instead.
+
+## Omarchy
+
+This fork drives Wispr Flow from the [Omarchy](https://omarchy.org/) bar:
+dictation state, start/stop, the dictation language, and a live microphone level
+meter while recording — with Wispr's own status bubble parked out of the way.
+The integration lives in [`omarchy/`](omarchy/README.md).
+
+Two patches make it possible, and both are in this fork only:
+
+- **Deep links reach a running app**
+  (`scripts/patches/linux-deeplink-second-instance.sh`). Wispr already answers
+  `wispr-flow://start-hands-free`, `stop-hands-free`, `switch-mic` and `open`,
+  but the `second-instance` handler's argv scan that delivers them was gated to
+  win32, so every link aimed at an already-running app was dropped and the
+  window was merely focused.
+- **A `set-language` route**
+  (`scripts/patches/linux-deeplink-set-language.sh`). Upstream offers no way to
+  change the dictation language from outside the app; the patch adds
+  `wispr-flow://set-language?lang=cs`, and a comma-separated list restores
+  automatic detection.
+
+The bar plugin drives the app entirely through those URLs — no ydotool, no
+synthesized global shortcuts, no privileged access.
+
+### Installing on Omarchy
+
+Neither the published packages nor the AUR build carry the patches, so the
+AppImage has to come from this fork:
+
+```bash
+git clone https://github.com/petrsimon/wispr-flow-linux.git
+cd wispr-flow-linux
+./build.sh --build appimage
+omarchy/install.sh --appimage build-linux/appimage/wispr-flow-*-x86_64.AppImage
+```
+
+`install.sh` needs `jq`, touches nothing outside `$HOME`, and is safe to re-run.
+It installs the AppImage to `~/.local/opt/wispr-flow/`, a
+`~/.local/bin/wispr-flow` wrapper and a desktop entry claiming the
+`wispr-flow:` URL scheme; drops the bar plugin into
+`~/.config/omarchy/plugins/wispr.flow/`; registers it in `shell.json` (backed up
+first); and restarts the shell, which a never-seen widget needs —
+`rescanPlugins` will not pick it up. Flags: `--section left|center|right`,
+`--languages en,cs`, `--no-icon`, `--no-restart`.
+
+It stops there deliberately. The Hyprland rule for the status bubble, the
+autostart line, and the `SUPER+CTRL+X` / `SUPER+CTRL+M` bindings are printed at
+the end rather than written into your config.
+[`omarchy/README.md`](omarchy/README.md) carries each of them verbatim, plus the
+reasoning behind the panel's shape — why it closes before starting dictation,
+and why choosing a microphone stays with `omarchy.audio`.
+
+> [!IMPORTANT]
+> This widget **replaces** Omarchy's default dictation
+> ([voxtype](https://github.com/voxtype/voxtype)) rather than sitting beside it:
+> two dictation front ends compete for the same microphone and the same paste
+> target. Stop `voxtype.service` and take over its bindings first — the
+> [switch-over](omarchy/README.md#relationship-to-voxtype) is three steps.
+
+> [!NOTE]
+> `build.sh` fetches the installer from Wispr's own endpoint, which currently
+> redirects to a versionless web-installer stub rather than the Squirrel
+> package. If the staging step fails there, point the build at a real installer
+> with `--exe <path>`.
 
 ## Building
 

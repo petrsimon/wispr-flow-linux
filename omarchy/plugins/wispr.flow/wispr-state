@@ -1,0 +1,180 @@
+#!/usr/bin/env bash
+#
+# One JSON snapshot of everything the Wispr Flow panel draws. Keeping the
+# gathering here rather than in QML means the log and config parsing is
+# testable from a shell and the panel stays presentation code.
+#
+#   { "running": true,
+#     "state": "idle",
+#     "languages": [ { "code": "cs", "name": "Czech", "selected": false } ],
+#     "auto": true,
+#     "device": "Ryzen HD Audio Controller Digital",
+#     "systemDevice": "Auto-detect (Default)",
+#     "overridden": true }
+#
+# "auto" means Wispr is detecting across several languages rather than pinned
+# to one -- that is what a multi-entry selectedLanguages means to the app.
+#
+# Microphone selection belongs to the system, not here: Wispr's own device
+# setting is an override, and while it sits on the app's "default" entry Wispr
+# simply follows whatever PipeWire is capturing from -- which the Omarchy audio
+# panel already controls, alongside input volume and mute. So the fields below
+# only report whether that override is in force, and name the entry that
+# releases it.
+
+set -euo pipefail
+
+LOG="${WISPR_LOG:-$HOME/.cache/wispr-flow/launcher.log}"
+CONFIG="${WISPR_CONFIG:-$HOME/.config/Wispr Flow/config.json}"
+# Languages the panel offers, as a comma-separated list of codes, given either
+# as the first argument or in the environment. Seeded at install time from the
+# app's own selection, because pinning one language rewrites that list and the
+# original set would otherwise be lost.
+LANGUAGES="${WISPR_LANGUAGES:-en}"
+
+# Wispr does not write a language change straight to config.json -- it holds it
+# in memory and flushes later -- so a change made through the deep link would
+# read back stale for minutes. Setting it here records the value alongside, and
+# the snapshot below prefers whichever of the two was written last: ours right
+# after a switch, the app's once it has flushed or the Hub has been used.
+LANG_STATE="${XDG_RUNTIME_DIR:-/tmp}/wispr-flow-language.$UID"
+
+# Start or stop dictation, whichever the current state calls for. Exposed here
+# as well as in the panel so a keybinding can reach it without the shell.
+toggle_dictation() {
+  command -v wispr-flow >/dev/null || { printf 'wispr-state: wispr-flow not on PATH\n' >&2; exit 2; }
+  case "$(state)" in
+    listening | initializing) exec wispr-flow "wispr-flow://stop-hands-free" ;;
+    *) exec wispr-flow "wispr-flow://start-hands-free" ;;
+  esac
+}
+
+set_language() {
+  local codes="$1"
+  [[ -n $codes ]] || { printf 'wispr-state: --set-language needs codes\n' >&2; exit 2; }
+  command -v wispr-flow >/dev/null || { printf 'wispr-state: wispr-flow not on PATH\n' >&2; exit 2; }
+  printf '%s' "$codes" > "$LANG_STATE"
+  exec wispr-flow "wispr-flow://set-language?lang=$codes"
+}
+
+
+running() {
+  pgrep -x wispr-flow >/dev/null 2>&1
+}
+
+# The app logs a transition on every state change; the last one is current.
+# No match is the normal "nothing dictated this session" case.
+state() {
+  [[ -r $LOG ]] || return 0
+  { grep -oE 'updateDictationStatus: [a-z_]+' "$LOG" || true; } \
+    | tail -n 1 \
+    | cut -d' ' -f2
+}
+
+# The live device list, as the app sees it: a single-quoted JSON array logged
+# on every settings sync. Only these are switchable -- the ranked list in
+# config.json also remembers devices that are unplugged. The JSON carries no
+# single quotes of its own, so the delimiters are unambiguous.
+devices_json() {
+  local line
+  [[ -r $LOG ]] || { printf '[]'; return 0; }
+  line=$({ grep -a "audioDevices: '" "$LOG" || true; } | tail -n 1)
+  [[ -n $line ]] || { printf '[]'; return 0; }
+  sed -E "s/^[^']*'//; s/'[^']*\$//" <<<"$line"
+}
+
+# Roughly when the running app started, so a recorded switch can be told from
+# a stale one left over from a previous run.
+app_started_at() {
+  local pid
+  pid=$(pgrep -x wispr-flow | head -n 1) || return 1
+  [[ -n $pid ]] || return 1
+  stat -c %Y "/proc/$pid" 2>/dev/null
+}
+
+selected_languages() {
+  local from_config='[]' started recorded
+  [[ -r $CONFIG ]] && from_config=$(jq -c '.prefs.user.selectedLanguages // []' \
+    "$CONFIG" 2>/dev/null || printf '[]')
+
+  # A switch we made holds until the app restarts. Comparing against config.json
+  # does not work: the app rewrites that file constantly for unrelated prefs and
+  # frequently serializes a snapshot that predates the change, so config is
+  # newer than our record while still carrying the old value.
+  if [[ -r $LANG_STATE ]]; then
+    started=$(app_started_at || printf '0')
+    recorded=$(stat -c %Y "$LANG_STATE" 2>/dev/null || printf '0')
+    if (( recorded > started )); then
+      jq -cRn --arg codes "$(cat "$LANG_STATE")" \
+        '$codes | split(",") | map(select(length > 0))' 2>/dev/null \
+        || printf '%s' "$from_config"
+      return 0
+    fi
+  fi
+
+  printf '%s' "$from_config"
+}
+
+current_device_id() {
+  [[ -r $CONFIG ]] || return 0
+  jq -r '.prefs.user.overrideAudioDeviceId // empty' "$CONFIG" 2>/dev/null || true
+}
+
+# Parsed here rather than at the top of the file: the actions below call
+# functions defined above, and a definition only exists once execution has
+# reached it -- running the loop earlier left `state` unset, so --toggle read an
+# empty state and always started a dictation instead of ending one.
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --toggle)       toggle_dictation ;;
+    --set-language) set_language "${2:-}" ;;
+    --languages)    LANGUAGES="${2:-$LANGUAGES}"; shift 2 ;;
+    -*)             printf 'wispr-state: unknown option %s\n' "$1" >&2; exit 2 ;;
+    *)              LANGUAGES="$1"; shift ;;
+  esac
+done
+
+if ! running; then
+  jq -n '{running: false, state: "", languages: [], auto: false,
+          device: "", systemDevice: "", overridden: false}'
+  exit 0
+fi
+
+jq -n \
+  --arg state "$(state)" \
+  --arg current "$(current_device_id)" \
+  --arg offered "$LANGUAGES" \
+  --argjson devices "$(devices_json)" \
+  --argjson selected "$(selected_languages)" \
+  '
+  # Endonyms where they differ usefully from the code; anything unlisted falls
+  # back to the bare code so an unknown language still renders.
+  {
+    ar: "Arabic",   cs: "Czech",     da: "Danish",   de: "German",
+    el: "Greek",    en: "English",   es: "Spanish",  fi: "Finnish",
+    fr: "French",   he: "Hebrew",    hi: "Hindi",    hu: "Hungarian",
+    id: "Indonesian", it: "Italian", ja: "Japanese", ko: "Korean",
+    nl: "Dutch",    no: "Norwegian", pl: "Polish",   pt: "Portuguese",
+    ro: "Romanian", ru: "Russian",   sk: "Slovak",   sv: "Swedish",
+    tr: "Turkish",  uk: "Ukrainian", vi: "Vietnamese", zh: "Chinese"
+  } as $names
+  | ($offered | split(",") | map(select(length > 0))) as $codes
+  | ($selected | length > 1) as $auto
+  | {
+      running: true,
+      state: $state,
+      auto: $auto,
+      device: (($devices | map(select(.deviceId == $current)) | first | .name) // ""),
+      systemDevice: (($devices | map(select(.deviceId == "default")) | first | .name)
+                     // "Auto-detect (Default)"),
+      overridden: ($current != "" and $current != "default"),
+      # `.` is rebound by the pipe into index(), so the code is captured first;
+      # otherwise index() is handed the whole selected array and matches it as a
+      # subsequence, marking every language as chosen.
+      languages: ($codes | map(. as $code | {
+        code: $code,
+        name: ($names[$code] // $code),
+        selected: (($auto | not) and ($selected | index($code) != null))
+      }))
+    }
+  '

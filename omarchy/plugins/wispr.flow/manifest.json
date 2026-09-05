@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "id": "wispr.flow",
+  "name": "Wispr Flow",
+  "version": "1.0.0",
+  "author": "wispr-flow-linux",
+  "license": "Unlicense",
+  "description": "Wispr Flow dictation state, microphone and language switching in the Omarchy bar.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "Wispr Flow",
+    "description": "Start and stop dictation, pick the microphone, pick the language.",
+    "category": "System",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "languages": "en",
+      "showIcon": true
+    },
+    "schema": [
+      {
+        "key": "showIcon",
+        "type": "boolean",
+        "label": "Show the icon in the bar",
+        "defaultValue": true
+      },
+      {
+        "key": "languages",
+        "type": "string",
+        "label": "Languages offered (comma-separated codes)",
+        "defaultValue": "en"
+      }
+    ]
+  }
+}
