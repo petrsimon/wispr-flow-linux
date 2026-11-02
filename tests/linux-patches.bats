@@ -10,6 +10,8 @@
 #   * mac-gates.sh                       -> Applications-folder guard gated to darwin
 #   * linux-deeplink.sh                  -> cold-start wispr-flow: argv parse on Linux
 #   * linux-deeplink-second-instance.sh  -> warm-start wispr-flow: argv parse on Linux
+#   * linux-deeplink-set-language.sh     -> adds a wispr-flow://set-language route
+#                                           (if/else and ternary dispatchers)
 #   * linux-early-singleton.sh           -> take the single-instance lock before init
 #   * helper-env.sh                      -> spreads process.env into the helper env
 #   * linux-disable-pill-drag.sh         -> force the drag-overlay flag false on Linux
@@ -1457,4 +1459,90 @@ JS
 	run bash "$PATCH_DIR/linux-deeplink-second-instance.sh" "$FIX"
 	[[ "$status" -ne 0 ]]
 	! grep -q 'WISPR_LINUX_WARM_DEEPLINK' "$FIX"
+}
+
+# =============================================================================
+# linux-deeplink-set-language.sh
+# =============================================================================
+
+# The switch-mic handler the patch reads its state accessor and logger from.
+set_language_handler() {
+	cat <<'JS'
+function ae(e){const t=new URL(e).searchParams.get("mic_name");if(!t)return void s().warn("Switch mic deeplink received without mic_name");s().info("Switch mic deeplink received with mic_name",t);const n=z.RA.sharedSettings.audioDevices}
+JS
+}
+
+# Up to 1.6.7 the dispatcher was an if/else chain.
+set_language_ifelse() {
+	set_language_handler
+	cat <<'JS'
+function re(e){if(e.startsWith("wispr-flow://start-hands-free"))se();else if(e.startsWith("wispr-flow://switch-mic"))ae(e);else ie(e)}
+JS
+}
+
+# 1.6.1337 emits the same chain as a ternary, behind a logging comma and ahead
+# of a duplicate-callback arm and a `||` fallback -- the shipped shape, so a
+# precedence mistake in the splice cannot pass on a simplified fixture.
+set_language_ternary() {
+	set_language_handler
+	cat <<'JS'
+function re(e){s().info("Received deeplink URL: ",e),e.startsWith("wispr-flow://start-hands-free")?se():e.startsWith("wispr-flow://stop-hands-free")?oe():e.startsWith("wispr-flow://switch-mic")?ae(e):(e.startsWith(Y)||e.startsWith(Z))&&X.isDuplicate(e)?s().info("Dropping duplicate LinkedIn connect callback deeplink",{customAttributes:{url:e}}):D(e,()=>ie(e))||ie(e)}
+JS
+}
+
+@test "set-language: adds an else-if branch to an if/else dispatcher" {
+	set_language_ifelse > "$FIX"
+	run bash "$PATCH_DIR/linux-deeplink-set-language.sh" "$FIX"
+	[[ "$status" -eq 0 ]]
+	grep -qF 'else if(e.startsWith("wispr-flow://set-language")){/*WISPR_LINUX_SET_LANGUAGE*/' "$FIX"
+	grep -qF 'z.RA.prefs.user.selectedLanguages=l' "$FIX"
+	node_check "$FIX"
+}
+
+@test "set-language: adds a ternary arm to a ternary dispatcher" {
+	set_language_ternary > "$FIX"
+	run bash "$PATCH_DIR/linux-deeplink-set-language.sh" "$FIX"
+	[[ "$status" -eq 0 ]]
+	grep -qF '?oe():e.startsWith("wispr-flow://set-language")?(()=>{/*WISPR_LINUX_SET_LANGUAGE*/' "$FIX"
+	grep -qF '})():e.startsWith("wispr-flow://switch-mic")?ae(e):' "$FIX"
+	node_check "$FIX"
+}
+
+@test "set-language: the ternary arm sets the pref and every other route still dispatches" {
+	command -v node >/dev/null || skip "node not installed"
+	set_language_ternary > "$FIX"
+	bash "$PATCH_DIR/linux-deeplink-set-language.sh" "$FIX"
+	cat >> "$FIX" <<'JS'
+var calls=[];function se(){calls.push("se")}function oe(){calls.push("oe")}function ie(){calls.push("ie")}
+function s(){return{warn(){},info(){},error(){}}}
+var Y="wispr-flow://linkedin",Z="wispr-flow/linkedin",X={isDuplicate(){calls.push("dup");return!0}};
+function D(){return!1}
+var z={RA:{prefs:{user:{selectedLanguages:["en"]}},sharedSettings:{audioDevices:[]}}};
+ae=function(){calls.push("ae")};
+re("wispr-flow://set-language?lang=cs,en");
+re("wispr-flow://start-hands-free");
+re("wispr-flow://stop-hands-free");
+re("wispr-flow://switch-mic?mic_name=x");
+re("wispr-flow://linkedin?code=1");
+re("wispr-flow://open");
+if(z.RA.prefs.user.selectedLanguages.join()!=="cs,en")process.exit(1);
+if(calls.join()!=="se,oe,ae,dup,ie")process.exit(2);
+JS
+	node "$FIX"
+}
+
+@test "set-language: idempotent on second run" {
+	set_language_ternary > "$FIX"
+	bash "$PATCH_DIR/linux-deeplink-set-language.sh" "$FIX"
+	assert_idempotent "$PATCH_DIR/linux-deeplink-set-language.sh" "$FIX"
+}
+
+@test "set-language: the first ternary arm is not taken for the anchor" {
+	# A switch-mic test with no `:` before it is not an arm of the chain.
+	set_language_handler > "$FIX"
+	echo 'function re(e){e.startsWith("wispr-flow://switch-mic")?ae(e):ie(e)}' >> "$FIX"
+	run bash "$PATCH_DIR/linux-deeplink-set-language.sh" "$FIX"
+	[[ "$status" -ne 0 ]]
+	[[ "$output" == *'expected exactly 1 switch-mic dispatcher branch, found 0'* ]]
+	! grep -q 'WISPR_LINUX_SET_LANGUAGE' "$FIX"
 }

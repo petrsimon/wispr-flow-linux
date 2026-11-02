@@ -30,6 +30,11 @@ Flow app version is tracked separately by the `+wispr{X.Y.Z}` suffix.
   `start-hands-free` / `stop-hands-free` / `switch-mic` / `open` routes
   reachable in practice, so a panel button or keybinding can drive dictation
   with a URL instead of a synthesized global shortcut.
+- `linux-deeplink-set-language.sh` found no switch-mic branch on Wispr
+  1.6.1337, whose minifier now emits the deep-link dispatcher as a ternary
+  chain instead of an if/else. The patch accepts both shapes, inserting the
+  set-language route as a ternary arm on the new one, and both deep-link
+  patches now carry upstream tripwires.
 
 ## [v1.0.5] - 2026-10-28
 

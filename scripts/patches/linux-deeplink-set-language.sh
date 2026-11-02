@@ -30,10 +30,13 @@
 #
 # THE PATCH
 # ---------
-# One extra branch in the deep-link dispatcher's if/else chain, inserted
-# immediately before the switch-mic branch it is modelled on:
+# One extra branch in the deep-link dispatcher's chain, inserted immediately
+# before the switch-mic branch it is modelled on. Up to 1.6.7 the chain is an
+# if/else; from 1.6.1337 (at the latest) the minifier emits a ternary, and the
+# statement body is wrapped in an arrow called on the spot:
 #
 #   else if(e.startsWith("wispr-flow://set-language")){ ...set the pref... }
+#   e.startsWith("wispr-flow://set-language")?(()=>{ ... })():e.startsWith(...
 #
 # `lang` takes one code to pin a language, or a comma-separated list to hand
 # the choice back to Wispr's own detection across those languages -- which is
@@ -89,9 +92,17 @@ with io.open(path, "r", encoding="utf-8", errors="surrogateescape") as f:
     data = f.read()
 
 # The switch-mic branch of the dispatcher chain. `url` is the dispatcher's
-# parameter, which the new branch reuses.
+# parameter, which the new branch reuses. Two shapes are accepted, because the
+# minifier rewrote the chain between releases:
+#   if/else (<= 1.6.7):  else if(e.startsWith("wispr-flow://switch-mic"))ae(e);
+#   ternary (1.6.1337):  ...?oe():e.startsWith("wispr-flow://switch-mic")?ae(e):...
+# The ternary arm is preceded by `:` (it is never the chain's first arm, which
+# is start-hands-free), so a stray startsWith elsewhere cannot match.
 branch = re.compile(
-    r'else if\((?P<url>[\w$]+)\.startsWith\("wispr-flow://switch-mic"\)\)'
+    r'(?P<ifelse>else if\()?'
+    r'(?(ifelse)|(?<=:))'
+    r'(?P<url>[\w$]+)\.startsWith\("wispr-flow://switch-mic"\)'
+    r'(?(ifelse)\)|\?)'
 )
 matches = list(branch.finditer(data))
 if len(matches) != 1:
@@ -127,8 +138,8 @@ log = log_m.group('log')
 # The new branch. Written defensively: a missing pref tree or a malformed URL
 # logs and returns instead of throwing out of the dispatcher, which would take
 # every later route down with it.
-new_branch = (
-    'else if(' + url + '.startsWith("wispr-flow://set-language")){'
+ternary = matches[0].group('ifelse') is None
+body = (
     '/*' + marker + '*/'
     'try{'
     'const l=(new URL(' + url + ').searchParams.get("lang")||"")'
@@ -140,8 +151,15 @@ new_branch = (
     + log + '().info(`Set language deeplink received: ${l.join(",")}`)}'
     '}catch(err){'
     + log + '().error("Error handling set language deeplink:",'
-    '{customAttributes:{error:err}})}}'
+    '{customAttributes:{error:err}})}'
 )
+route = url + '.startsWith("wispr-flow://set-language")'
+if ternary:
+    # An arm of the ternary must be an expression, so the statement body runs
+    # in an arrow called on the spot; the dispatcher discards arm values.
+    new_branch = route + '?(()=>{' + body + '})():'
+else:
+    new_branch = 'else if(' + route + '){' + body + '}'
 
 data, n = branch.subn(lambda m: new_branch + m.group(0), data, count=1)
 if n != 1:
@@ -150,7 +168,7 @@ if n != 1:
 with io.open(path, "w", encoding="utf-8", errors="surrogateescape") as f:
     f.write(data)
 print(f"Patched: added set-language route (url={url!r}, state={state!r}, "
-      f"logger={log!r}).")
+      f"logger={log!r}, shape={'ternary' if ternary else 'if/else'}).")
 PY
 
 # --- Verify the result --------------------------------------------------------
